@@ -4,6 +4,80 @@ import json
 import os
 from datetime import datetime, timezone
 from collections import deque
+
+
+class KafkaCluster:
+    """
+    Simulates a local Kafka cluster.
+    In production: uses confluent-kafka or kafka-python
+    to connect to real Apache Kafka brokers.
+    """
+
+    def __init__(self, config: dict):
+        self.config = config
+        self.brokers = [
+            {"id": 1, "host": "localhost:9092", "status": "leader"},
+            {"id": 2, "host": "localhost:9093", "status": "follower"},
+            {"id": 3, "host": "localhost:9094", "status": "follower"},
+        ]
+        self.topics = {}
+        self.total_messages = 0
+
+    def start(self) -> bool:
+        print("\n[KAFKA] Starting Kafka cluster...")
+        for broker in self.brokers:
+            print(f"  Broker {broker['id']} | {broker['host']} | "
+                  f"Role: {broker['status']} ✅")
+            time.sleep(0.2)
+        return True
+
+    def create_topic(self, topic: str, partitions: int,
+                     replication: int) -> bool:
+        print(f"\n[KAFKA] Creating topic: '{topic}'")
+        print(f"  Partitions:         {partitions}")
+        print(f"  Replication Factor: {replication}")
+        print(f"  Retention:          7 days")
+        time.sleep(0.3)
+        self.topics[topic] = {
+            "partitions": partitions,
+            "replication_factor": replication,
+            "messages": 0,
+            "bytes": 0,
+        }
+        print(f"  ✅ Topic '{topic}' created!")
+        return True
+
+    def send(self, topic: str, key: str, value: dict) -> dict:
+        """Sends one message to a Kafka topic partition."""
+        if topic not in self.topics:
+            return {"success": False, "error": "Topic not found"}
+
+        partition = hash(key) % self.config["num_partitions"]
+        msg_bytes = len(json.dumps(value))
+        self.topics[topic]["messages"] += 1
+        self.topics[topic]["bytes"] += msg_bytes
+        self.total_messages += 1
+
+        return {
+            "success": True,
+            "topic": topic,
+            "partition": partition,
+            "offset": self.topics[topic]["messages"],
+            "key": key,
+            "bytes": msg_bytes,
+        }
+
+    def get_stats(self) -> dict:
+        topic_stats = self.topics.get(self.config["topic"], {})
+        return {
+            "total_messages": self.total_messages,
+            "topic_messages": topic_stats.get("messages", 0),
+            "topic_bytes_mb": round(
+                topic_stats.get("bytes", 0) / (1024 * 1024), 2),
+            "active_brokers": len(self.brokers),
+            "partitions": self.config["num_partitions"],
+        }
+
 def main():
     print("=" * 65)
     print("  StreamForge - Week 1: Kafka Foundation")
