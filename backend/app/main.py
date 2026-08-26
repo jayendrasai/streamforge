@@ -78,6 +78,109 @@ class KafkaCluster:
             "partitions": self.config["num_partitions"],
         }
 
+    
+
+class TruckTelemetryProducer:
+    """
+    High-throughput Kafka producer for IoT truck telemetry.
+    Generates realistic sensor data for 50,000 trucks.
+    In production: uses confluent_kafka.Producer with batching.
+    """
+
+    def __init__(self, kafka: KafkaCluster):
+        self.kafka = kafka
+        self.topic  = kafka.config["topic"]
+        self.produced = 0
+        self.errors = 0
+        self.throughput_history = deque(maxlen=20)
+
+        # Pre-generate truck fleet
+        self.trucks = self._generate_fleet(kafka.config["num_trucks"])
+
+    def _generate_fleet(self, count: int) -> list:
+        """Generates a fleet of virtual trucks with metadata."""
+        print(f"\n[PRODUCER] Generating fleet of {count:,} trucks...")
+        fleet = []
+        sample = min(count, 20)
+        for i in range(1, sample + 1):
+            fleet.append({
+                "truck_id": f"TRK-{i:05d}",
+                "region": random.choice(TRUCK_REGIONS),
+                "type": random.choice(TRUCK_TYPES),
+                "base_temp": random.uniform(15, 35),
+                "route": f"Route-{random.randint(1, 500)}",
+            })
+        # Simulate remaining trucks
+        for i in range(sample + 1, count + 1):
+            fleet.append({
+                "truck_id": f"TRK-{i:05d}",
+                "region": random.choice(TRUCK_REGIONS),
+                "type": random.choice(TRUCK_TYPES),
+                "base_temp": random.uniform(15, 35),
+                "route": f"Route-{random.randint(1, 500)}",
+            })
+        print(f"  ✅ Fleet ready: {count:,} trucks across "
+              f"{len(TRUCK_REGIONS)} regions")
+        return fleet
+
+    def generate_event(self, truck: dict) -> dict:
+        """Generates one telemetry event for a truck."""
+        temp_variation = random.uniform(-2, 2)
+        return {
+            "truck_id": truck["truck_id"],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "temperature_c": round(truck["base_temp"] + temp_variation, 2),
+            "humidity_pct": round(random.uniform(30, 80), 1),
+            "speed_kmh": round(random.uniform(0, 120), 1),
+            "fuel_level_pct": round(random.uniform(10, 100), 1),
+            "gps_lat": round(random.uniform(8.0, 37.0), 6),
+            "gps_lon": round(random.uniform(68.0, 97.0), 6),
+            "region": truck["region"],
+            "truck_type": truck["type"],
+            "route": truck["route"],
+            "engine_rpm": random.randint(600, 3000),
+            "alert": temp_variation > 1.5,
+        }
+
+    def produce_batch(self, batch_size: int) -> dict:
+        """Sends a batch of telemetry events to Kafka."""
+        start = time.time()
+        batch_trucks = random.choices(self.trucks, k=batch_size)
+
+        success = 0
+        for truck in batch_trucks:
+            event = self.generate_event(truck)
+            result = self.kafka.send(
+                topic=self.topic,
+                key=truck["truck_id"],
+                value=event,
+            )
+            if result["success"]:
+                success += 1
+                self.produced += 1
+            else:
+                self.errors += 1
+
+        elapsed = time.time() - start
+        throughput = round(success / elapsed) if elapsed > 0 else 0
+        self.throughput_history.append(throughput)
+
+        return {
+            "batch_size": batch_size,
+            "success": success,
+            "errors": batch_size - success,
+            "elapsed_ms": round(elapsed * 1000, 2),
+            "throughput_per_sec": throughput,
+        }
+
+    def get_avg_throughput(self) -> int:
+        if not self.throughput_history:
+            return 0
+        return int(sum(self.throughput_history) /
+                   len(self.throughput_history))
+
+
+
 def main():
     print("=" * 65)
     print("  StreamForge - Week 1: Kafka Foundation")
