@@ -179,6 +179,55 @@ class TruckTelemetryProducer:
         return int(sum(self.throughput_history) /
                    len(self.throughput_history))
 
+class TopologyVisualizer:
+    """
+    Visualizes the streaming DAG topology in the terminal.
+    In production: renders as React Flow diagram in browser.
+    """
+
+    def display(self, kafka_stats: dict, producer_stats: dict):
+        print(f"\n{'=' * 65}")
+        print(f"  StreamForge Topology — Directed Acyclic Graph (DAG)")
+        print(f"{'=' * 65}")
+        print(f"""
+  ┌─────────────────┐
+  │  50,000 Trucks  │  IoT Sensors → Telemetry Events
+  │  (IoT Sources)  │
+  └────────┬────────┘
+           │ {producer_stats['produced']:,} events produced
+           ▼
+  ┌─────────────────┐
+  │  Apache Kafka   │  {kafka_stats['active_brokers']} Brokers | 
+  │  Message Broker │  {kafka_stats['partitions']} Partitions
+  │  (topic:        │  {kafka_stats['topic_bytes_mb']} MB ingested
+  │  truck-telemetry│
+  └────────┬────────┘
+           │ Partitioned by Truck ID
+           ▼
+  ┌─────────────────┐
+  │  20 Python      │  Faust/Bytewax Workers
+  │  Worker Nodes   │  Windowed Aggregations
+  │  (StreamForge)  │  5-min Rolling Avg Temp
+  └────────┬────────┘
+           │ Processed results
+           ▼
+  ┌─────────────────┐
+  │  RocksDB State  │  Fault-Tolerant State Store
+  │  Store          │  Changelog → Kafka
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐
+  │  React Flow     │  Live Dashboard
+  │  Dashboard      │  Metrics & Alerts
+  └─────────────────┘
+""")
+        print(f"  Kafka Stats:")
+        print(f"  Total Messages:  {kafka_stats['topic_messages']:,}")
+        print(f"  Data Ingested:   {kafka_stats['topic_bytes_mb']} MB")
+        print(f"  Avg Throughput:  "
+              f"{producer_stats['avg_throughput']:,} events/sec")
+        print(f"{'=' * 65}")
 
 
 def main():
