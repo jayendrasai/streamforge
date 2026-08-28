@@ -5,6 +5,20 @@ import os
 from datetime import datetime, timezone
 from collections import deque
 
+# ── Kafka Configuration ──────────────────────────────────────────────
+KAFKA_CONFIG = {
+    "bootstrap_servers": "localhost:9092",
+    "topic": "truck-telemetry",
+    "num_partitions": 20,
+    "replication_factor": 3,
+    "num_trucks": 50000,
+    "batch_size": 1000,
+    "target_events_per_sec": 100000,
+}
+
+TRUCK_REGIONS = ["North", "South", "East", "West", "Central"]
+TRUCK_TYPES   = ["Heavy", "Medium", "Light", "Refrigerated", "Tanker"]
+
 
 class KafkaCluster:
     """
